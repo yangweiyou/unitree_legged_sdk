@@ -1,1 +1,5 @@
+*~
+*.csv
+*.kdev4
+doxygen/
 build
