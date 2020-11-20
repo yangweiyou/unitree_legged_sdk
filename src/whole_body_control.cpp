@@ -31,7 +31,7 @@ public:
         udp.InitCmdData ( cmd );
 
         /* Get Yaml Paras */
-        string legged_robot_path = getenv ( "LEGGED_ROBOT_PATH" );
+        string legged_robot_path = "/home/yangwei/projects/cpp/legged_robot";// getenv ( "LEGGED_ROBOT_PATH" );
         yaml = YAML::LoadFile ( legged_robot_path + "/yaml/param.yaml" );
         yaml_prt = make_shared<YAML::Node> ( yaml );
 
