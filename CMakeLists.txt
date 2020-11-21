@@ -35,8 +35,12 @@ add_executable(whole_body_control src/whole_body_control.cpp)
 target_link_libraries(whole_body_control ${EXTRA_LIBS})
 
 # one pc one process
-#add_executable(example_position examples/example_position.cpp)
-#target_link_libraries(example_position ${EXTRA_LIBS})
+add_executable(recovery src/recovery.cpp)
+target_link_libraries(recovery ${EXTRA_LIBS})
+
+# one pc one process
+add_executable(example_position examples/example_position.cpp)
+target_link_libraries(example_position ${EXTRA_LIBS})
 
 #add_executable(example_velocity examples/example_velocity.cpp)
 #target_link_libraries(example_velocity ${EXTRA_LIBS})

@@ -31,7 +31,7 @@ public:
         udp.InitCmdData ( cmd );
 
         /* Get Yaml Paras */
-        string legged_robot_path = "/home/yangwei/projects/cpp/legged_robot";// getenv ( "LEGGED_ROBOT_PATH" );
+        string legged_robot_path = "/home/unitree/legged_robot_packages/legged_robot"; //getenv ( "LEGGED_ROBOT_PATH" );
         yaml = YAML::LoadFile ( legged_robot_path + "/yaml/param.yaml" );
         yaml_prt = make_shared<YAML::Node> ( yaml );
 
@@ -40,7 +40,7 @@ public:
         URDFReadFromFile ( urdf_file.c_str(), &a1, true, false );
         a1_prt = make_shared<Model> ( a1 );
 
-        odom_prt = make_shared<Odometer> ( a1_prt, yaml_prt );
+        odom_prt = make_shared<Odometer>( a1_prt, yaml_prt );
         control_prt = make_shared<WholeBodyControl> ( a1_prt, yaml_prt );
         first_loop = true;
         t = 0.0;
@@ -72,6 +72,7 @@ public:
     bool first_loop;
     Eigen::Vector3d com_position0;
     double t;
+    double t_home;
     vector<int> jmap;
     VectorNd q, dq, Q, DQ;
 };
@@ -92,7 +93,32 @@ void Custom::RobotControl()
     udp.GetRecv ( state );
     // printf("%d\n", motiontime);
 
-    if ( motiontime >= 500 ) {
+    if ( motiontime >= 10 ) {
+if ( motiontime <= 500) {
+        t_home+=dt;
+        double pos[12] ,lastPos[12], percent;
+        for ( int j=0; j<12; j++ ) {
+            lastPos[j] = state.motorState[j].q;
+        }
+        double duration = 10;
+        double targetPos[12] = {0.0, 0.67, -1.3, -0.0, 0.67, -1.3,
+                                0.0, 0.67, -1.3, -0.0, 0.67, -1.3
+                               };
+        if ( t_home<=duration ) {
+            percent = t_home/duration;
+            for ( int j=0; j<12; j++ ) {
+                cmd.motorCmd[j].q = lastPos[j]* ( 1-percent ) + targetPos[j]*percent;
+                cmd.motorCmd[j].dq = 0;
+                cmd.motorCmd[j].Kp = 100;
+                cmd.motorCmd[j].Kd = 5;
+                if ( j%3==0 ) {
+                    cmd.motorCmd[j].tau = -0.65f;
+                } else {
+                    cmd.motorCmd[j].tau = 0.0f;
+                }
+            }
+        }
+    } else {
         for ( uint i=0; i<jmap.size(); i++ ) {
             q[i] = state.motorState[jmap[i]].q;
             dq[i] = state.motorState[jmap[i]].dq;
@@ -105,6 +131,9 @@ void Custom::RobotControl()
 
         Point base;
         base = odom_prt->Run ( q, dq, contact );
+
+cout << "base positon: " << base.pos.transpose() <<endl;
+cout << "base orient: " << base.euler_pos.transpose() <<endl;
 
         VectorNd Q ( joint_num+6 );
         VectorNd DQ ( joint_num+6 );
@@ -134,17 +163,21 @@ void Custom::RobotControl()
         h.traj[foot_num] = x;
 
         j = control_prt->InverseDynamics ( h );
+cout << "position cmd: " << j.pos.transpose() << endl;
+cout << "torque cmd: " << j.tau.transpose() << endl;
 
         for ( uint i=0; i<jmap.size(); i++ ) {
+            cmd.motorCmd[jmap[i]].mode = 0x0A;
             cmd.motorCmd[jmap[i]].q = j.pos[i];
-            cmd.motorCmd[jmap[i]].dq = j.pos[i];
-            cmd.motorCmd[jmap[i]].Kp = 100;
-            cmd.motorCmd[jmap[i]].Kd = 5;
+            cmd.motorCmd[jmap[i]].dq = j.vel[i];
+            cmd.motorCmd[jmap[i]].Kp = 10;
+            cmd.motorCmd[jmap[i]].Kd = 1;
             cmd.motorCmd[jmap[i]].tau = j.tau[i];
         }
     }
+}
 
-    safe.PowerProtect ( cmd, state, 1 );
+    safe.PowerProtect ( cmd, state, 6 );
 
     udp.SetSend ( cmd );
 }
