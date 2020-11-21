@@ -39,6 +39,10 @@ add_executable(recovery src/recovery.cpp)
 target_link_libraries(recovery ${EXTRA_LIBS})
 
 # one pc one process
+add_executable(zero_torque src/zero_torque.cpp)
+target_link_libraries(zero_torque ${EXTRA_LIBS})
+
+# one pc one process
 add_executable(example_position examples/example_position.cpp)
 target_link_libraries(example_position ${EXTRA_LIBS})
 

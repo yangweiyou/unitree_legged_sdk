@@ -21,8 +21,8 @@ using namespace RigidBodyDynamics::Math;
 using namespace RigidBodyDynamics::Addons;
 using namespace legged_robot;
 
-uint joint_num = 12;
-uint foot_num = 4;
+const uint joint_num = 12;
+const uint foot_num = 4;
 
 class Custom
 {
@@ -40,7 +40,7 @@ public:
         URDFReadFromFile ( urdf_file.c_str(), &a1, true, false );
         a1_prt = make_shared<Model> ( a1 );
 
-        odom_prt = make_shared<Odometer>( a1_prt, yaml_prt );
+        odom_prt = make_shared<Odometer> ( a1_prt, yaml_prt );
         control_prt = make_shared<WholeBodyControl> ( a1_prt, yaml_prt );
         first_loop = true;
         t = 0.0;
@@ -49,6 +49,8 @@ public:
         dq = VectorNd::Zero ( joint_num );
         Q = VectorNd::Zero ( joint_num+6 );
         DQ = VectorNd::Zero ( joint_num+6 );
+
+        t1 = 0.0;
     }
     void UDPSend();
     void UDPRecv();
@@ -72,9 +74,16 @@ public:
     bool first_loop;
     Eigen::Vector3d com_position0;
     double t;
-    double t_home;
     vector<int> jmap;
     VectorNd q, dq, Q, DQ;
+
+    double t1;
+    double t_home = 10.0;
+    bool init = false;
+    double initPos[joint_num];
+    double targetPos[joint_num] = {0.0, 0.67, -1.3, -0.0, 0.67, -1.3,
+                                   0.0, 0.67, -1.3, -0.0, 0.67, -1.3
+                                  };
 };
 
 void Custom::UDPRecv()
@@ -87,6 +96,14 @@ void Custom::UDPSend()
     udp.Send();
 }
 
+double jointLinearInterpolation ( double initPos, double targetPos, double rate )
+{
+    double p;
+    rate = std::min ( std::max ( rate, 0.0 ), 1.0 );
+    p = initPos* ( 1-rate ) + targetPos*rate;
+    return p;
+}
+
 void Custom::RobotControl()
 {
     motiontime++;
@@ -94,90 +111,95 @@ void Custom::RobotControl()
     // printf("%d\n", motiontime);
 
     if ( motiontime >= 10 ) {
-if ( motiontime <= 500) {
-        t_home+=dt;
-        double pos[12] ,lastPos[12], percent;
-        for ( int j=0; j<12; j++ ) {
-            lastPos[j] = state.motorState[j].q;
-        }
-        double duration = 10;
-        double targetPos[12] = {0.0, 0.67, -1.3, -0.0, 0.67, -1.3,
-                                0.0, 0.67, -1.3, -0.0, 0.67, -1.3
-                               };
-        if ( t_home<=duration ) {
-            percent = t_home/duration;
-            for ( int j=0; j<12; j++ ) {
-                cmd.motorCmd[j].q = lastPos[j]* ( 1-percent ) + targetPos[j]*percent;
+        if ( motiontime <= uint ( t_home/dt ) ) {
+            t1+=dt;
+	    
+            if ( !init ) {
+                for ( int j=0; j<joint_num; j++ ) {
+                    initPos[j] = state.motorState[j].q;
+                }
+                init = true;
+            }
+
+            double percent = t1/t_home;
+            for ( int j=0; j<joint_num; j++ ) {
+                cmd.motorCmd[j].q = jointLinearInterpolation ( initPos[j], targetPos[j], percent ); //lastPos[j]* ( 1-percent ) + targetPos[j]*percent;
                 cmd.motorCmd[j].dq = 0;
                 cmd.motorCmd[j].Kp = 100;
                 cmd.motorCmd[j].Kd = 5;
-                if ( j%3==0 ) {
-                    cmd.motorCmd[j].tau = -0.65f;
-                } else {
-                    cmd.motorCmd[j].tau = 0.0f;
+                cmd.motorCmd[j].tau = 0.0f;
+            }
+
+            // gravity compensation
+            cmd.motorCmd[FR_0].tau = -0.65f;
+            cmd.motorCmd[FL_0].tau = +0.65f;
+            cmd.motorCmd[RR_0].tau = -0.65f;
+            cmd.motorCmd[RL_0].tau = +0.65f;
+
+        } else {
+            t += dt;
+	    
+            for ( uint i=0; i<jmap.size(); i++ ) {
+                q[i] = state.motorState[jmap[i]].q;
+                dq[i] = state.motorState[jmap[i]].dq;
+            }
+
+            Eigen::Quaterniond imu ( state.imu.quaternion[0], state.imu.quaternion[1], state.imu.quaternion[2], state.imu.quaternion[3] );
+
+            VectorNd contact ( foot_num );
+            contact << state.footForce[FL_],state.footForce[FR_],state.footForce[RL_],state.footForce[RR_];
+
+            Point base;
+            base = odom_prt->Run ( q, dq, contact );
+
+            cout << "base positon: " << base.pos.transpose() <<endl;
+            cout << "base orient: " << base.euler_pos.transpose() <<endl;
+
+            VectorNd Q ( joint_num+6 );
+            VectorNd DQ ( joint_num+6 );
+            Q << base.pos, base.euler_pos, q;
+            DQ << base.vel, base.euler_vel, dq;
+            control_prt->Update ( Q, DQ );
+
+            if ( first_loop ) {
+                for ( uint i=0; i<foot_num; i++ ) {
+                    Point x;
+                    x.pos << control_prt->GetFootPosition ( i );
+                    h.traj.push_back ( x );
+                    h.contact.push_back ( true );
                 }
-            }
-        }
-    } else {
-        for ( uint i=0; i<jmap.size(); i++ ) {
-            q[i] = state.motorState[jmap[i]].q;
-            dq[i] = state.motorState[jmap[i]].dq;
-        }
-
-        Eigen::Quaterniond imu ( state.imu.quaternion[0], state.imu.quaternion[1], state.imu.quaternion[2], state.imu.quaternion[3] );
-
-        VectorNd contact ( foot_num );
-        contact << state.footForce[FL_],state.footForce[FR_],state.footForce[RL_],state.footForce[RR_];
-
-        Point base;
-        base = odom_prt->Run ( q, dq, contact );
-
-cout << "base positon: " << base.pos.transpose() <<endl;
-cout << "base orient: " << base.euler_pos.transpose() <<endl;
-
-        VectorNd Q ( joint_num+6 );
-        VectorNd DQ ( joint_num+6 );
-        Q << base.pos, base.euler_pos, q;
-        DQ << base.vel, base.euler_vel, dq;
-        control_prt->Update ( Q, DQ );
-
-        if ( first_loop ) {
-            for ( uint i=0; i<foot_num; i++ ) {
                 Point x;
-                x.pos << control_prt->GetFootPosition ( i );
+                x.pos << control_prt->GetCoMPosition();
                 h.traj.push_back ( x );
-                h.contact.push_back ( true );
+                h.contact.push_back ( false );
+
+                com_position0 = control_prt->GetCoMPosition();
+                first_loop = false;
             }
+
             Point x;
-            x.pos << control_prt->GetCoMPosition();
-            h.traj.push_back ( x );
-            h.contact.push_back ( false );
+            x.pos << com_position0 + ( cos ( t/10.0*2*M_PI )-1 ) *Vector3d ( 0, 0, 0.05 );
+            h.traj[foot_num] = x;
 
-            com_position0 = control_prt->GetCoMPosition();
-            first_loop = false;
+            j = control_prt->InverseDynamics ( h );
+            cout << "position cmd: " << j.pos.transpose() << endl;
+            cout << "torque cmd: " << j.tau.transpose() << endl;
+
+            for ( uint i=0; i<jmap.size(); i++ ) {
+                cmd.motorCmd[jmap[i]].mode = 0x0A;
+                cmd.motorCmd[jmap[i]].q = j.pos[i];
+                cmd.motorCmd[jmap[i]].dq = j.vel[i];
+                cmd.motorCmd[jmap[i]].Kp = 10;
+                cmd.motorCmd[jmap[i]].Kd = 1;
+                cmd.motorCmd[jmap[i]].tau = j.tau[i];
+            }
         }
-
-        t += dt;
-        Point x;
-        x.pos << com_position0 + ( cos ( t/10.0*2*M_PI )-1 ) *Vector3d ( 0, 0, 0.05 );
-        h.traj[foot_num] = x;
-
-        j = control_prt->InverseDynamics ( h );
-cout << "position cmd: " << j.pos.transpose() << endl;
-cout << "torque cmd: " << j.tau.transpose() << endl;
-
-        for ( uint i=0; i<jmap.size(); i++ ) {
-            cmd.motorCmd[jmap[i]].mode = 0x0A;
-            cmd.motorCmd[jmap[i]].q = j.pos[i];
-            cmd.motorCmd[jmap[i]].dq = j.vel[i];
-            cmd.motorCmd[jmap[i]].Kp = 10;
-            cmd.motorCmd[jmap[i]].Kd = 1;
-            cmd.motorCmd[jmap[i]].tau = j.tau[i];
-        }
+        
+        safe.PositionLimit ( cmd );
+        safe.PowerProtect ( cmd, state, 5 );
     }
-}
 
-    safe.PowerProtect ( cmd, state, 6 );
+//     safe.PowerProtect ( cmd, state, 6 );
 
     udp.SetSend ( cmd );
 }
