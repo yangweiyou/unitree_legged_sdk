@@ -12,6 +12,9 @@ Use of this source code is governed by the MPL-2.0 license, see LICENSE.
 #include <yaml-cpp/yaml.h>
 #include "ctrl/whole_body_control.hpp"
 #include "odom/odometer.hpp"
+#include "utils/saveEigen.h"
+
+// #define PRINT_MESSAGE
 
 using namespace UNITREE_LEGGED_SDK;
 
@@ -51,7 +54,13 @@ public:
         DQ = VectorNd::Zero ( joint_num+6 );
 
         t1 = 0.0;
+	logger.resize( 10000, 12 );
     }
+
+    ~Custom() {
+        save ( &logger, "~/a1_log_data.csv" );
+    }
+
     void UDPSend();
     void UDPRecv();
     void RobotControl();
@@ -84,6 +93,8 @@ public:
     double targetPos[joint_num] = {0.0, 0.67, -1.3, -0.0, 0.67, -1.3,
                                    0.0, 0.67, -1.3, -0.0, 0.67, -1.3
                                   };
+    Eigen::MatrixXd logger;
+    uint logger_counter = 0;
 };
 
 void Custom::UDPRecv()
@@ -113,7 +124,7 @@ void Custom::RobotControl()
     if ( motiontime >= 10 ) {
         if ( motiontime <= uint ( t_home/dt ) ) {
             t1+=dt;
-	    
+
             if ( !init ) {
                 for ( int j=0; j<joint_num; j++ ) {
                     initPos[j] = state.motorState[j].q;
@@ -138,7 +149,7 @@ void Custom::RobotControl()
 
         } else {
             t += dt;
-	    
+
             for ( uint i=0; i<jmap.size(); i++ ) {
                 q[i] = state.motorState[jmap[i]].q;
                 dq[i] = state.motorState[jmap[i]].dq;
@@ -151,9 +162,6 @@ void Custom::RobotControl()
 
             Point base;
             base = odom_prt->Run ( q, dq, contact );
-
-//            cout << "measured base positon: " << base.pos.transpose() <<endl;
-//            cout << "measured base orient: " << base.euler_pos.transpose() <<endl;
 
             VectorNd Q ( joint_num+6 );
             VectorNd DQ ( joint_num+6 );
@@ -183,14 +191,20 @@ void Custom::RobotControl()
 
             j = control_prt->InverseDynamics ( h );
             static uint print_counter = 0;
-//            print_counter++;
-            if (print_counter==50) {
-            cout << "---------------------------------------------" << endl;
-            cout << "measured base positon: " << base.pos.transpose() << endl;
-            cout << "measured base orient: " << base.euler_pos.transpose() << endl;
-            cout << "desired base positon: " << x.pos.transpose() << endl;
-            cout << "desired base orient: " << x.euler_pos.transpose() << endl;
-            print_counter = 0;
+            print_counter++;
+            if ( print_counter==100 ) {
+#ifdef PRINT_MESSAGE
+                cout << "---------------------------------------------" << endl;
+                cout << "measured base positon: " << base.pos.transpose() << endl;
+                cout << "measured base orient: " << base.euler_pos.transpose() << endl;
+                cout << "desired base positon: " << x.pos.transpose() << endl;
+                cout << "desired base orient: " << x.euler_pos.transpose() << endl;
+#endif
+                logger.row ( logger_counter ) << base.pos, base.euler_pos, x.pos, x.euler_pos;
+                logger_counter++;
+                if ( logger_counter>=logger.rows() ) {
+                    logger_counter = 0;
+                }
             }
 //            cout << "position cmd: " << j.pos.transpose() << endl;
 //            cout << "torque cmd: " << j.tau.transpose() << endl;
@@ -204,7 +218,7 @@ void Custom::RobotControl()
                 cmd.motorCmd[jmap[i]].tau = j.tau[i];
             }
         }
-        
+
         safe.PositionLimit ( cmd );
         safe.PowerProtect ( cmd, state, 5 );
     }
