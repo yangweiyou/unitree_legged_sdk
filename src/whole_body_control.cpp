@@ -61,7 +61,7 @@ public:
     LowCmd cmd = {0};
     LowState state = {0};
     int motiontime = 0;
-    float dt = 0.002;     // 0.001~0.01
+    float dt = 0.001;     // 0.001~0.01
 
     Model a1;
     YAML::Node yaml;
@@ -152,8 +152,8 @@ void Custom::RobotControl()
             Point base;
             base = odom_prt->Run ( q, dq, contact );
 
-            cout << "base positon: " << base.pos.transpose() <<endl;
-            cout << "base orient: " << base.euler_pos.transpose() <<endl;
+//            cout << "measured base positon: " << base.pos.transpose() <<endl;
+//            cout << "measured base orient: " << base.euler_pos.transpose() <<endl;
 
             VectorNd Q ( joint_num+6 );
             VectorNd DQ ( joint_num+6 );
@@ -182,15 +182,25 @@ void Custom::RobotControl()
             h.traj[foot_num] = x;
 
             j = control_prt->InverseDynamics ( h );
-            cout << "position cmd: " << j.pos.transpose() << endl;
-            cout << "torque cmd: " << j.tau.transpose() << endl;
+            static uint print_counter = 0;
+//            print_counter++;
+            if (print_counter==50) {
+            cout << "---------------------------------------------" << endl;
+            cout << "measured base positon: " << base.pos.transpose() << endl;
+            cout << "measured base orient: " << base.euler_pos.transpose() << endl;
+            cout << "desired base positon: " << x.pos.transpose() << endl;
+            cout << "desired base orient: " << x.euler_pos.transpose() << endl;
+            print_counter = 0;
+            }
+//            cout << "position cmd: " << j.pos.transpose() << endl;
+//            cout << "torque cmd: " << j.tau.transpose() << endl;
 
             for ( uint i=0; i<jmap.size(); i++ ) {
                 cmd.motorCmd[jmap[i]].mode = 0x0A;
                 cmd.motorCmd[jmap[i]].q = j.pos[i];
                 cmd.motorCmd[jmap[i]].dq = j.vel[i];
-                cmd.motorCmd[jmap[i]].Kp = 10;
-                cmd.motorCmd[jmap[i]].Kd = 1;
+                cmd.motorCmd[jmap[i]].Kp = 0; //5;
+                cmd.motorCmd[jmap[i]].Kd = 0; //1;
                 cmd.motorCmd[jmap[i]].tau = j.tau[i];
             }
         }

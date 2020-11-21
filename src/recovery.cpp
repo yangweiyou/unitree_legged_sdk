@@ -77,9 +77,9 @@ void Custom::RobotControl()
     if ( motiontime >= 10 ) {
         t+=dt;
 	
-        Eigen::VectorXd contact ( foot_num );
-        contact << state.footForce[FL_],state.footForce[FR_],state.footForce[RL_],state.footForce[RR_];
-	cout << "Contact force: " << contact.transpose() << endl;
+//         Eigen::VectorXd contact ( foot_num );
+//         contact << state.footForce[FL_],state.footForce[FR_],state.footForce[RL_],state.footForce[RR_];
+// 	cout << "Contact force: " << contact.transpose() << endl;
 
         if ( !init ) {
             for ( int j=0; j<joint_num; j++ ) {
