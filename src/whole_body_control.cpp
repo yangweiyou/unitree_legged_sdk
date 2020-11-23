@@ -54,12 +54,12 @@ public:
         DQ = VectorNd::Zero ( joint_num+6 );
 
         t1 = 0.0;
-        logger.resize ( 12, 400 );
+        logger.resize ( 12, 300 );
     }
 
     ~Custom() {
         cout << "Save file!" << endl;
-        save ( &logger, "/home/unitree/a1_log_data.csv" );
+        save ( &logger, "/home/unitree/tmp/a1_log_data.csv" );
     }
 
     void UDPSend();
@@ -187,9 +187,16 @@ void Custom::RobotControl()
             }
 
             Point x;
-            x.pos << com_position0 + ( cos ( t*2*M_PI/10.0 )-1 ) *Vector3d ( 0, 0, 0.05 );
-            x.vel << sin ( t*2*M_PI/10.0 ) *Vector3d ( 0, 0, 0.05*2*M_PI/10.0 );
-            x.acc << cos ( t*2*M_PI/10.0 ) *Vector3d ( 0, 0, 0.05*2*M_PI/10.0*2*M_PI/10.0 );
+//             x.pos << com_position0;
+//             x.pos << com_position0 + ( cos ( t*2*M_PI/10.0 )-1 ) *Vector3d ( 0, 0, 0.05 );
+//             x.vel << sin ( t*2*M_PI/10.0 ) *Vector3d ( 0, 0, 0.05*2*M_PI/10.0 );
+//             x.acc << cos ( t*2*M_PI/10.0 ) *Vector3d ( 0, 0, 0.05*2*M_PI/10.0*2*M_PI/10.0 );
+	    Vector3d d (0, 0.05, 0);
+	    double T = 5.0;
+	    double K = 2*M_PI/T;
+            x.pos << com_position0 + sin ( t*K ) *d;
+            x.vel << K*cos ( t*K ) *d;
+            x.acc << K*K*sin ( t*K ) *d;
             h.traj[foot_num] = x;
 
             j = control_prt->InverseDynamics ( h );
@@ -209,7 +216,7 @@ void Custom::RobotControl()
 //cout << "logger counter: " << logger_counter << "\t logger cols " << logger.rows() << endl;
                 if ( logger_counter>=logger.cols() ) {
                     cout << "Save file!" << endl;
-                    save ( &logger, "/home/unitree/a1_log_data.csv" );
+                    save ( &logger, "/home/unitree/tmp/a1_log_data.csv" );
                     logger_counter = 0;
                 }
             }
@@ -218,8 +225,8 @@ void Custom::RobotControl()
 
             for ( uint i=0; i<jmap.size(); i++ ) {
                 cmd.motorCmd[jmap[i]].mode = 0x0A;
-                cmd.motorCmd[jmap[i]].q = j.pos[i];
-                cmd.motorCmd[jmap[i]].dq = j.vel[i];
+                cmd.motorCmd[jmap[i]].q = PosStopF; //j.pos[i];
+                cmd.motorCmd[jmap[i]].dq = VelStopF; // j.vel[i];
                 cmd.motorCmd[jmap[i]].Kp = 0; //5;
                 cmd.motorCmd[jmap[i]].Kd = 0; //1;
                 cmd.motorCmd[jmap[i]].tau = j.tau[i];
@@ -227,7 +234,7 @@ void Custom::RobotControl()
         }
 
         safe.PositionLimit ( cmd );
-        safe.PowerProtect ( cmd, state, 5 );
+        safe.PowerProtect ( cmd, state, 8 );
     }
 
 //     safe.PowerProtect ( cmd, state, 6 );
