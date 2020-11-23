@@ -14,7 +14,7 @@ Use of this source code is governed by the MPL-2.0 license, see LICENSE.
 #include "odom/odometer.hpp"
 #include "utils/saveEigen.h"
 
-// #define PRINT_MESSAGE
+//#define PRINT_MESSAGE
 
 using namespace UNITREE_LEGGED_SDK;
 
@@ -54,11 +54,12 @@ public:
         DQ = VectorNd::Zero ( joint_num+6 );
 
         t1 = 0.0;
-	logger.resize( 10000, 12 );
+        logger.resize ( 12, 400 );
     }
 
     ~Custom() {
-        save ( &logger, "~/a1_log_data.csv" );
+        cout << "Save file!" << endl;
+        save ( &logger, "/home/unitree/a1_log_data.csv" );
     }
 
     void UDPSend();
@@ -186,23 +187,29 @@ void Custom::RobotControl()
             }
 
             Point x;
-            x.pos << com_position0 + ( cos ( t/10.0*2*M_PI )-1 ) *Vector3d ( 0, 0, 0.05 );
+            x.pos << com_position0 + ( cos ( t*2*M_PI/10.0 )-1 ) *Vector3d ( 0, 0, 0.05 );
+            x.vel << sin ( t*2*M_PI/10.0 ) *Vector3d ( 0, 0, 0.05*2*M_PI/10.0 );
+            x.acc << cos ( t*2*M_PI/10.0 ) *Vector3d ( 0, 0, 0.05*2*M_PI/10.0*2*M_PI/10.0 );
             h.traj[foot_num] = x;
 
             j = control_prt->InverseDynamics ( h );
             static uint print_counter = 0;
             print_counter++;
             if ( print_counter==100 ) {
+                print_counter = 0;
 #ifdef PRINT_MESSAGE
                 cout << "---------------------------------------------" << endl;
-                cout << "measured base positon: " << base.pos.transpose() << endl;
+                cout << "measured com positon: " << control_prt->GetCoMPosition() << endl;
                 cout << "measured base orient: " << base.euler_pos.transpose() << endl;
-                cout << "desired base positon: " << x.pos.transpose() << endl;
+                cout << "desired com positon: " << x.pos.transpose() << endl;
                 cout << "desired base orient: " << x.euler_pos.transpose() << endl;
 #endif
-                logger.row ( logger_counter ) << base.pos, base.euler_pos, x.pos, x.euler_pos;
+                logger.col ( logger_counter ) << control_prt->GetCoMPosition(), base.euler_pos, x.pos, x.euler_pos;
                 logger_counter++;
-                if ( logger_counter>=logger.rows() ) {
+//cout << "logger counter: " << logger_counter << "\t logger cols " << logger.rows() << endl;
+                if ( logger_counter>=logger.cols() ) {
+                    cout << "Save file!" << endl;
+                    save ( &logger, "/home/unitree/a1_log_data.csv" );
                     logger_counter = 0;
                 }
             }
