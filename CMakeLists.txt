@@ -28,7 +28,11 @@ set(EXTRA_LIBS -pthread
                ${RBDL_LIBRARY}
                ${RBDL_URDFReader_LIBRARY}
                yaml-cpp
-               libwhole_body_control.so)
+               liblegged_robot.so)
+
+# one pc one process
+add_executable(test_walk_plan src/test_walk_plan.cpp)
+target_link_libraries(test_walk_plan ${EXTRA_LIBS})
 
 # one pc one process
 add_executable(whole_body_control src/whole_body_control.cpp)

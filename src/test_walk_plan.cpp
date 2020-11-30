@@ -10,9 +10,8 @@ Use of this source code is governed by the MPL-2.0 license, see LICENSE.
 
 #include <rbdl/addons/urdfreader/urdfreader.h>
 #include <yaml-cpp/yaml.h>
-#include "ctrl/whole_body_control.hpp"
-#include "odom/odometer.hpp"
-#include "utils/saveEigen.h"
+#include <signal.h>
+#include "task/walk_task.hpp"
 
 //#define PRINT_MESSAGE
 
@@ -26,6 +25,21 @@ using namespace legged_robot;
 
 const uint joint_num = 12;
 const uint foot_num = 4;
+
+
+shared_ptr<WalkTask> walk;
+    
+/**
+ * @brief Define the function to be called when ctrl-c (SIGINT) is sent to process
+ *
+ * @param signum signal Ctrl+C
+ * @return void
+ */
+void signal_callback_handler ( int signum )
+{
+    walk->Shut();
+    exit ( signum ); // Terminate program
+}
 
 class Custom
 {
@@ -43,23 +57,18 @@ public:
         URDFReadFromFile ( urdf_file.c_str(), &a1, true, false );
         a1_prt = make_shared<Model> ( a1 );
 
-        odom_prt = make_shared<Odometer> ( a1_prt, yaml_prt );
-        control_prt = make_shared<WholeBodyControl> ( a1_prt, yaml_prt );
-        first_loop = true;
+//         walk = make_shared<WalkTask> ( make_shared<Model>(a1), make_shared<YAML::Node>(yaml) );
+        walk = make_shared<WalkTask> ( a1_prt, yaml_prt );
         t = 0.0;
         jmap= {FL_0, FL_1, FL_2, FR_0, FR_1, FR_2, RL_0, RL_1, RL_2, RR_0, RR_1, RR_2};
         q = VectorNd::Zero ( joint_num );
         dq = VectorNd::Zero ( joint_num );
-        Q = VectorNd::Zero ( joint_num+6 );
-        DQ = VectorNd::Zero ( joint_num+6 );
 
         t1 = 0.0;
-        logger.resize ( 12, 300 );
+	open_loop_control = yaml["open_loop_control"].as<bool>();
     }
 
     ~Custom() {
-        cout << "Save file!" << endl;
-        save ( &logger, "/home/unitree/tmp/a1_log_data.csv" );
     }
 
     void UDPSend();
@@ -77,25 +86,21 @@ public:
     YAML::Node yaml;
     shared_ptr<YAML::Node> yaml_prt;
     shared_ptr<Model> a1_prt;
-    shared_ptr<Odometer> odom_prt;
-    shared_ptr<WholeBodyControl> control_prt;
-    legged_robot::HighCmd h;
     legged_robot::JointCmd j;
-    bool first_loop;
-    Eigen::Vector3d com_position0;
     double t;
     vector<int> jmap;
-    VectorNd q, dq, Q, DQ;
+    VectorNd q, dq;
 
     double t1;
     double t_home = 10.0;
-    bool init = false;
+    bool init_home = false;
+    bool init_walk = false;
     double initPos[joint_num];
     double targetPos[joint_num] = {0.0, 0.67, -1.3, -0.0, 0.67, -1.3,
                                    0.0, 0.67, -1.3, -0.0, 0.67, -1.3
                                   };
-    Eigen::MatrixXd logger;
-    uint logger_counter = 0;
+				  
+    bool open_loop_control;
 };
 
 void Custom::UDPRecv()
@@ -126,11 +131,11 @@ void Custom::RobotControl()
         if ( motiontime <= uint ( t_home/dt ) ) {
             t1+=dt;
 
-            if ( !init ) {
+            if ( !init_home ) {
                 for ( int j=0; j<joint_num; j++ ) {
                     initPos[j] = state.motorState[j].q;
                 }
-                init = true;
+                init_home = true;
             }
 
             double percent = t1/t_home;
@@ -156,83 +161,34 @@ void Custom::RobotControl()
                 dq[i] = state.motorState[jmap[i]].dq;
             }
 
-            Eigen::Quaterniond imu ( state.imu.quaternion[0], state.imu.quaternion[1], state.imu.quaternion[2], state.imu.quaternion[3] );
-
             VectorNd contact ( foot_num );
             contact << state.footForce[FL_],state.footForce[FR_],state.footForce[RL_],state.footForce[RR_];
 
-            Point base;
-            base = odom_prt->Run ( q, dq, contact );
-
-            VectorNd Q ( joint_num+6 );
-            VectorNd DQ ( joint_num+6 );
-            Q << base.pos, base.euler_pos, q;
-            DQ << base.vel, base.euler_vel, dq;
-            control_prt->Update ( Q, DQ );
-
-            if ( first_loop ) {
-                for ( uint i=0; i<foot_num; i++ ) {
-                    Point x;
-                    x.pos << control_prt->GetFootPosition ( i );
-                    h.traj.push_back ( x );
-                    h.contact.push_back ( true );
-                }
-                Point x;
-                x.pos << control_prt->GetCoMPosition();
-                h.traj.push_back ( x );
-                h.contact.push_back ( false );
-
-                com_position0 = control_prt->GetCoMPosition();
-                first_loop = false;
-            }
-
-            Point x;
-//             x.pos << com_position0;
-//             x.pos << com_position0 + ( cos ( t*2*M_PI/10.0 )-1 ) *Vector3d ( 0, 0, 0.05 );
-//             x.vel << sin ( t*2*M_PI/10.0 ) *Vector3d ( 0, 0, 0.05*2*M_PI/10.0 );
-//             x.acc << cos ( t*2*M_PI/10.0 ) *Vector3d ( 0, 0, 0.05*2*M_PI/10.0*2*M_PI/10.0 );
-            Vector3d d ( 0, 0.05, 0 );
-            double T = 5.0;
-            double K = 2*M_PI/T;
-            x.pos << com_position0 + sin ( t*K ) *d;
-            x.vel << K*cos ( t*K ) *d;
-            x.acc << K*K*sin ( t*K ) *d;
-            h.traj[foot_num] = x;
-
-            for ( uint i=0; i<foot_num; i++ ) {
-                contact[i] = ( h.contact[i]?1:0 );
-            }
-            
-            j = control_prt->InverseDynamics ( h, contact );
-            static uint print_counter = 0;
-            print_counter++;
-            if ( print_counter==100 ) {
-                print_counter = 0;
-#ifdef PRINT_MESSAGE
-                cout << "---------------------------------------------" << endl;
-                cout << "measured com positon: " << control_prt->GetCoMPosition() << endl;
-                cout << "measured base orient: " << base.euler_pos.transpose() << endl;
-                cout << "desired com positon: " << x.pos.transpose() << endl;
-                cout << "desired base orient: " << x.euler_pos.transpose() << endl;
-#endif
-                logger.col ( logger_counter ) << control_prt->GetCoMPosition(), base.euler_pos, x.pos, x.euler_pos;
-                logger_counter++;
-//cout << "logger counter: " << logger_counter << "\t logger cols " << logger.rows() << endl;
-                if ( logger_counter>=logger.cols() ) {
-                    cout << "Save file!" << endl;
-                    save ( &logger, "/home/unitree/tmp/a1_log_data.csv" );
-                    logger_counter = 0;
-                }
-            }
-//            cout << "position cmd: " << j.pos.transpose() << endl;
-//            cout << "torque cmd: " << j.tau.transpose() << endl;
-
+            Eigen::Quaterniond imu ( state.imu.quaternion[0], state.imu.quaternion[1], state.imu.quaternion[2], state.imu.quaternion[3] );
+	    
+	    if (!init_walk) {
+	      walk->Init(q, dq, contact, &imu);
+	      init_walk = true;
+	    }
+	    
+	    if (open_loop_control) {
+	      j = walk->Run();
+	    } else {
+	      j = walk->Run(q, dq, contact, &imu);
+	    }
+	    
             for ( uint i=0; i<jmap.size(); i++ ) {
+//                 cmd.motorCmd[jmap[i]].mode = 0x0A;
+//                 cmd.motorCmd[jmap[i]].q = PosStopF; //j.pos[i];
+//                 cmd.motorCmd[jmap[i]].dq = VelStopF; // j.vel[i];
+//                 cmd.motorCmd[jmap[i]].Kp = 0; //5;
+//                 cmd.motorCmd[jmap[i]].Kd = 0; //1;
+//                 cmd.motorCmd[jmap[i]].tau = j.tau[i];
                 cmd.motorCmd[jmap[i]].mode = 0x0A;
-                cmd.motorCmd[jmap[i]].q = PosStopF; //j.pos[i];
-                cmd.motorCmd[jmap[i]].dq = VelStopF; // j.vel[i];
-                cmd.motorCmd[jmap[i]].Kp = 0; //5;
-                cmd.motorCmd[jmap[i]].Kd = 0; //1;
+                cmd.motorCmd[jmap[i]].q = j.pos[i];
+                cmd.motorCmd[jmap[i]].dq = j.vel[i];
+                cmd.motorCmd[jmap[i]].Kp = 100; //5;
+                cmd.motorCmd[jmap[i]].Kd = 5; //1;
                 cmd.motorCmd[jmap[i]].tau = j.tau[i];
             }
         }
@@ -240,8 +196,6 @@ void Custom::RobotControl()
         safe.PositionLimit ( cmd );
         safe.PowerProtect ( cmd, state, 8 );
     }
-
-//     safe.PowerProtect ( cmd, state, 6 );
 
     udp.SetSend ( cmd );
 }
@@ -252,6 +206,9 @@ int main ( void )
               << "WARNING: Make sure the robot is hung up." << std::endl
               << "Press Enter to continue..." << std::endl;
     std::cin.ignore();
+    
+    /* Register signal and signal handler */
+    signal ( SIGINT, signal_callback_handler ); // put behind, otherwise will be overwirtten by others such as ROS
 
     Custom custom ( LOWLEVEL );
     InitEnvironment();
