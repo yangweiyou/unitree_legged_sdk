@@ -28,7 +28,7 @@ const uint foot_num = 4;
 
 
 shared_ptr<WalkTask> walk;
-    
+
 /**
  * @brief Define the function to be called when ctrl-c (SIGINT) is sent to process
  *
@@ -65,7 +65,7 @@ public:
         dq = VectorNd::Zero ( joint_num );
 
         t1 = 0.0;
-	open_loop_control = yaml["open_loop_control"].as<bool>();
+        open_loop_control = yaml["open_loop_control"].as<bool>();
     }
 
     ~Custom() {
@@ -99,7 +99,7 @@ public:
     double targetPos[joint_num] = {0.0, 0.67, -1.3, -0.0, 0.67, -1.3,
                                    0.0, 0.67, -1.3, -0.0, 0.67, -1.3
                                   };
-				  
+
     bool open_loop_control;
 };
 
@@ -165,31 +165,51 @@ void Custom::RobotControl()
             contact << state.footForce[FL_],state.footForce[FR_],state.footForce[RL_],state.footForce[RR_];
 
             Eigen::Quaterniond imu ( state.imu.quaternion[0], state.imu.quaternion[1], state.imu.quaternion[2], state.imu.quaternion[3] );
-	    
-	    if (!init_walk) {
-	      walk->Init(q, dq, contact, &imu);
-	      init_walk = true;
-	    }
-	    
-	    if (open_loop_control) {
-	      j = walk->Run();
-	    } else {
-	      j = walk->Run(q, dq, contact, &imu);
-	    }
-	    
-            for ( uint i=0; i<jmap.size(); i++ ) {
+
+            if ( !init_walk ) {
+                walk->Init ( q, dq, contact, &imu );
+                init_walk = true;
+            }
+
+            if ( open_loop_control ) {
+                j = walk->Run();
+            } else {
+                j = walk->Run ( q, dq, contact, &imu );
+            }
+
+//             for ( uint i=0; i<jmap.size(); i++ ) {
+// //                 cmd.motorCmd[jmap[i]].mode = 0x0A;
+// //                 cmd.motorCmd[jmap[i]].q = PosStopF; //j.pos[i];
+// //                 cmd.motorCmd[jmap[i]].dq = VelStopF; // j.vel[i];
+// //                 cmd.motorCmd[jmap[i]].Kp = 0; //5;
+// //                 cmd.motorCmd[jmap[i]].Kd = 0; //1;
+// //                 cmd.motorCmd[jmap[i]].tau = j.tau[i];
 //                 cmd.motorCmd[jmap[i]].mode = 0x0A;
-//                 cmd.motorCmd[jmap[i]].q = PosStopF; //j.pos[i];
-//                 cmd.motorCmd[jmap[i]].dq = VelStopF; // j.vel[i];
-//                 cmd.motorCmd[jmap[i]].Kp = 0; //5;
-//                 cmd.motorCmd[jmap[i]].Kd = 0; //1;
+//                 cmd.motorCmd[jmap[i]].q = j.pos[i];
+//                 cmd.motorCmd[jmap[i]].dq = j.vel[i];
+//                 cmd.motorCmd[jmap[i]].Kp = 100; //5;
+//                 cmd.motorCmd[jmap[i]].Kd = 5; //1;
 //                 cmd.motorCmd[jmap[i]].tau = j.tau[i];
-                cmd.motorCmd[jmap[i]].mode = 0x0A;
-                cmd.motorCmd[jmap[i]].q = j.pos[i];
-                cmd.motorCmd[jmap[i]].dq = j.vel[i];
-                cmd.motorCmd[jmap[i]].Kp = 100; //5;
-                cmd.motorCmd[jmap[i]].Kd = 5; //1;
-                cmd.motorCmd[jmap[i]].tau = j.tau[i];
+//             }
+            for ( uint i=0; i<foot_num; i++ ) {
+                cmd.motorCmd[jmap[i*3+0]].mode = 0x0A;
+                cmd.motorCmd[jmap[i*3+0]].Kp = yaml["joint_control"]["hip_roll"]["kp"].as<double>();
+                cmd.motorCmd[jmap[i*3+0]].Kd = yaml["joint_control"]["hip_roll"]["kd"].as<double>();
+                cmd.motorCmd[jmap[i*3+0]].q = j.pos[i*3+0];
+                cmd.motorCmd[jmap[i*3+0]].dq = j.vel[i*3+0];
+                cmd.motorCmd[jmap[i*3+0]].tau = j.tau[i*3+0];
+                cmd.motorCmd[jmap[i*3+1]].mode = 0x0A;
+                cmd.motorCmd[jmap[i*3+1]].Kp = yaml["joint_control"]["hip_pitch"]["kp"].as<double>();
+                cmd.motorCmd[jmap[i*3+1]].Kd = yaml["joint_control"]["hip_pitch"]["kd"].as<double>();
+                cmd.motorCmd[jmap[i*3+1]].q = j.pos[i*3+1];
+                cmd.motorCmd[jmap[i*3+1]].dq = j.vel[i*3+1];
+                cmd.motorCmd[jmap[i*3+1]].tau = j.tau[i*3+1];
+                cmd.motorCmd[jmap[i*3+2]].mode = 0x0A;
+                cmd.motorCmd[jmap[i*3+2]].Kp = yaml["joint_control"]["knee"]["kp"].as<double>();
+                cmd.motorCmd[jmap[i*3+2]].Kd = yaml["joint_control"]["knee"]["kd"].as<double>();
+                cmd.motorCmd[jmap[i*3+2]].q = j.pos[i*3+2];
+                cmd.motorCmd[jmap[i*3+2]].dq = j.vel[i*3+2];
+                cmd.motorCmd[jmap[i*3+2]].tau = j.tau[i*3+2];
             }
         }
 
@@ -206,7 +226,7 @@ int main ( void )
               << "WARNING: Make sure the robot is hung up." << std::endl
               << "Press Enter to continue..." << std::endl;
     std::cin.ignore();
-    
+
     /* Register signal and signal handler */
     signal ( SIGINT, signal_callback_handler ); // put behind, otherwise will be overwirtten by others such as ROS
 
