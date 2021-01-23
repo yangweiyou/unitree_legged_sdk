@@ -187,9 +187,13 @@ void Custom::RobotControl()
             }
 
             Point x;
-            x.pos << com_position0 + ( cos ( t*2*M_PI/10.0 )-1 ) *Vector3d ( 0, 0, 0.05 );
-            x.vel << sin ( t*2*M_PI/10.0 ) *Vector3d ( 0, 0, 0.05*2*M_PI/10.0 );
-            x.acc << cos ( t*2*M_PI/10.0 ) *Vector3d ( 0, 0, 0.05*2*M_PI/10.0*2*M_PI/10.0 );
+//             x.pos << com_position0 + ( cos ( t*2*M_PI/10.0 )-1 ) *Vector3d ( 0, 0, 0.05 );
+//             x.vel << -sin ( t*2*M_PI/10.0 ) *Vector3d ( 0, 0, 0.05*2*M_PI/10.0 );
+//             x.acc << -cos ( t*2*M_PI/10.0 ) *Vector3d ( 0, 0, 0.05*2*M_PI/10.0*2*M_PI/10.0 );
+	    double T = 10.0;
+            x.pos << com_position0 + ( cos ( t/T*2*M_PI )-1 ) *Vector3d ( 0, 0, 0.05 );
+            x.vel << -2*M_PI/T*sin ( t/T*2*M_PI )*Vector3d ( 0, 0, 0.05 );
+            x.acc << -pow(2*M_PI/T, 2)*cos ( t/T*2*M_PI )*Vector3d ( 0, 0, 0.05 );
             h.traj[foot_num] = x;
 
             j = control_prt->InverseDynamics ( h );
