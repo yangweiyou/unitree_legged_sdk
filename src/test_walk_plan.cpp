@@ -12,6 +12,7 @@ Use of this source code is governed by the MPL-2.0 license, see LICENSE.
 #include <yaml-cpp/yaml.h>
 #include <signal.h>
 #include "task/walk_task.hpp"
+#include "task/crawl_task.hpp"
 
 //#define PRINT_MESSAGE
 
@@ -27,7 +28,8 @@ const uint joint_num = 12;
 const uint foot_num = 4;
 
 
-shared_ptr<WalkTask> walk;
+// shared_ptr<WalkTask> walk;
+shared_ptr<CrawlTask> walk;
 
 /**
  * @brief Define the function to be called when ctrl-c (SIGINT) is sent to process
@@ -57,8 +59,8 @@ public:
         URDFReadFromFile ( urdf_file.c_str(), &a1, true, false );
         a1_prt = make_shared<Model> ( a1 );
 
-//         walk = make_shared<WalkTask> ( make_shared<Model>(a1), make_shared<YAML::Node>(yaml) );
-        walk = make_shared<WalkTask> ( a1_prt, yaml_prt );
+//         walk = make_shared<WalkTask> ( a1_prt, yaml_prt );
+        walk = make_shared<CrawlTask> ( a1_prt, yaml_prt );
         t = 0.0;
         jmap= {FL_0, FL_1, FL_2, FR_0, FR_1, FR_2, RL_0, RL_1, RL_2, RR_0, RR_1, RR_2};
         q = VectorNd::Zero ( joint_num );
@@ -66,6 +68,7 @@ public:
 
         t1 = 0.0;
         open_loop_control = yaml["open_loop_control"].as<bool>();
+        dt = 1.0/yaml["loop_rate"].as<double>();
     }
 
     ~Custom() {
@@ -80,7 +83,7 @@ public:
     LowCmd cmd = {0};
     LowState state = {0};
     int motiontime = 0;
-    float dt = 0.001;     // 0.001~0.01
+    float dt;//  = 0.001, 0.001~0.01
 
     Model a1;
     YAML::Node yaml;
