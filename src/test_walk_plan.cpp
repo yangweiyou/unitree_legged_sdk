@@ -8,38 +8,23 @@ Use of this source code is governed by the MPL-2.0 license, see LICENSE.
 #include <iostream>
 #include <unistd.h>
 
-#include <rbdl/addons/urdfreader/urdfreader.h>
 #include <yaml-cpp/yaml.h>
 #include <signal.h>
-#include "task/walk_task.hpp"
-#include "task/crawl_task.hpp"
+#include "control_interface.hpp"
 
 //#define PRINT_MESSAGE
 
 using namespace UNITREE_LEGGED_SDK;
-
 using namespace std;
-using namespace RigidBodyDynamics;
-using namespace RigidBodyDynamics::Math;
-using namespace RigidBodyDynamics::Addons;
-using namespace legged_robot;
 
 const uint joint_num = 12;
 const uint foot_num = 4;
 
+shared_ptr<legged_robot::ControlInterface> control;
 
-// shared_ptr<WalkTask> walk;
-shared_ptr<CrawlTask> walk;
-
-/**
- * @brief Define the function to be called when ctrl-c (SIGINT) is sent to process
- *
- * @param signum signal Ctrl+C
- * @return void
- */
 void signal_callback_handler ( int signum )
 {
-    walk->Shut();
+    control->Shut();
     exit ( signum ); // Terminate program
 }
 
@@ -52,22 +37,15 @@ public:
         /* Get Yaml Paras */
         string legged_robot_path = "/home/unitree/legged_robot_packages/legged_robot"; //getenv ( "LEGGED_ROBOT_PATH" );
         yaml = YAML::LoadFile ( legged_robot_path + "/yaml/param.yaml" );
-        yaml_prt = make_shared<YAML::Node> ( yaml );
 
-        /* Get URDF Model */
-        string urdf_file = legged_robot_path + "/urdf/a1.urdf";
-        URDFReadFromFile ( urdf_file.c_str(), &a1, true, false );
-        a1_prt = make_shared<Model> ( a1 );
-
-//         walk = make_shared<WalkTask> ( a1_prt, yaml_prt );
-        walk = make_shared<CrawlTask> ( a1_prt, yaml_prt );
+        control = make_shared<legged_robot::ControlInterface> ( legged_robot_path );
         t = 0.0;
         jmap= {FL_0, FL_1, FL_2, FR_0, FR_1, FR_2, RL_0, RL_1, RL_2, RR_0, RR_1, RR_2};
-        q = VectorNd::Zero ( joint_num );
-        dq = VectorNd::Zero ( joint_num );
+        q = Eigen::VectorXd::Zero ( joint_num );
+        dq = Eigen::VectorXd::Zero ( joint_num );
+	contact = Eigen::VectorXd::Zero(foot_num);
 
         t1 = 0.0;
-        open_loop_control = yaml["open_loop_control"].as<bool>();
         dt = 1.0/yaml["loop_rate"].as<double>();
     }
 
@@ -85,25 +63,22 @@ public:
     int motiontime = 0;
     float dt;//  = 0.001, 0.001~0.01
 
-    Model a1;
     YAML::Node yaml;
-    shared_ptr<YAML::Node> yaml_prt;
-    shared_ptr<Model> a1_prt;
     legged_robot::JointCmd j;
     double t;
     vector<int> jmap;
-    VectorNd q, dq;
+    Eigen::VectorXd q, dq;
+    Eigen::VectorXd contact;
+    legged_robot::IMU imu;
 
     double t1;
     double t_home = 10.0;
     bool init_home = false;
-    bool init_walk = false;
+    bool init_control = false;
     double initPos[joint_num];
     double targetPos[joint_num] = {0.0, 0.67, -1.3, -0.0, 0.67, -1.3,
                                    0.0, 0.67, -1.3, -0.0, 0.67, -1.3
                                   };
-
-    bool open_loop_control;
 };
 
 void Custom::UDPRecv()
@@ -131,7 +106,7 @@ void Custom::RobotControl()
     // printf("%d\n", motiontime);
 
     if ( motiontime >= 10 ) {
-        if ( motiontime <= uint ( t_home/dt ) ) {
+        if ( motiontime <= uint ( t_home/dt ) ) { // Homing
             t1+=dt;
 
             if ( !init_home ) {
@@ -156,44 +131,26 @@ void Custom::RobotControl()
             cmd.motorCmd[RR_0].tau = -0.65f;
             cmd.motorCmd[RL_0].tau = +0.65f;
 
-        } else {
+        } else { // Control
             t += dt;
 
             for ( uint i=0; i<jmap.size(); i++ ) {
                 q[i] = state.motorState[jmap[i]].q;
                 dq[i] = state.motorState[jmap[i]].dq;
             }
-
-            VectorNd contact ( foot_num );
             contact << state.footForce[FL_],state.footForce[FR_],state.footForce[RL_],state.footForce[RR_];
 
-            Eigen::Quaterniond imu ( state.imu.quaternion[0], state.imu.quaternion[1], state.imu.quaternion[2], state.imu.quaternion[3] );
+            imu.quat = Eigen::Quaterniond ( state.imu.quaternion[0], state.imu.quaternion[1], state.imu.quaternion[2], state.imu.quaternion[3] );
+            imu.omega << state.imu.gyroscope[0], state.imu.gyroscope[1], state.imu.gyroscope[2];
+            imu.accel << state.imu.accelerometer[0], state.imu.accelerometer[1], state.imu.accelerometer[2];
 
-            if ( !init_walk ) {
-                walk->Init ( q, dq, contact, &imu );
-                init_walk = true;
+            if ( !init_control ) {
+                control->Init ( q, dq, contact, imu );
+                init_control = true;
             }
 
-            if ( open_loop_control ) {
-                j = walk->Run();
-            } else {
-                j = walk->Run ( q, dq, contact, &imu );
-            }
+            j = control->Run ( q, dq, contact, imu );
 
-//             for ( uint i=0; i<jmap.size(); i++ ) {
-// //                 cmd.motorCmd[jmap[i]].mode = 0x0A;
-// //                 cmd.motorCmd[jmap[i]].q = PosStopF; //j.pos[i];
-// //                 cmd.motorCmd[jmap[i]].dq = VelStopF; // j.vel[i];
-// //                 cmd.motorCmd[jmap[i]].Kp = 0; //5;
-// //                 cmd.motorCmd[jmap[i]].Kd = 0; //1;
-// //                 cmd.motorCmd[jmap[i]].tau = j.tau[i];
-//                 cmd.motorCmd[jmap[i]].mode = 0x0A;
-//                 cmd.motorCmd[jmap[i]].q = j.pos[i];
-//                 cmd.motorCmd[jmap[i]].dq = j.vel[i];
-//                 cmd.motorCmd[jmap[i]].Kp = 100; //5;
-//                 cmd.motorCmd[jmap[i]].Kd = 5; //1;
-//                 cmd.motorCmd[jmap[i]].tau = j.tau[i];
-//             }
             for ( uint i=0; i<foot_num; i++ ) {
                 cmd.motorCmd[jmap[i*3+0]].mode = 0x0A;
                 cmd.motorCmd[jmap[i*3+0]].Kp = yaml["joint_control"]["hip_roll"]["kp"].as<double>();
