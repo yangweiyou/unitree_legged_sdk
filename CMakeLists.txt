@@ -11,6 +11,7 @@ endif(NOT CMAKE_BUILD_TYPE)
 
 LIST( APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake )
 
+FIND_PACKAGE(yaml-cpp REQUIRED)
 # FIND_PACKAGE(Eigen3 3.0.0 REQUIRED)
 # FIND_PACKAGE(RBDL REQUIRED)
 
@@ -30,7 +31,7 @@ set(EXTRA_LIBS -pthread
 #                ${RBDL_LIBRARY}
 #                ${RBDL_URDFReader_LIBRARY}
                yaml-cpp
-               liblegged_robot.so)
+               legged_control)
 
 # one pc one process
 add_executable(test_walk_plan src/test_walk_plan.cpp)
