@@ -8,9 +8,9 @@ Use of this source code is governed by the MPL-2.0 license, see LICENSE.
 #include <iostream>
 #include <unistd.h>
 
-#include <yaml-cpp/yaml.h>
+// #include <yaml-cpp/yaml.h>
 #include <signal.h>
-#include "control_interface.hpp"
+#include "legged_control.hpp"
 
 //#define PRINT_MESSAGE
 
@@ -20,7 +20,7 @@ using namespace std;
 const uint joint_num = 12;
 const uint foot_num = 4;
 
-shared_ptr<legged_robot::ControlInterface> control;
+shared_ptr<legged_robot::LeggedControl> control;
 
 void signal_callback_handler ( int signum )
 {
@@ -35,10 +35,8 @@ public:
         udp.InitCmdData ( cmd );
 
         /* Get Yaml Paras */
-        string legged_robot_path = "/home/unitree/legged_robot_packages/legged_robot"; //getenv ( "LEGGED_ROBOT_PATH" );
-        yaml = YAML::LoadFile ( legged_robot_path + "/yaml/param.yaml" );
-
-        control = make_shared<legged_robot::ControlInterface> ( legged_robot_path );
+//        string legged_robot_path = getenv ( "LEGGED_ROBOT_PATH" );
+        control = make_shared<legged_robot::LeggedControl> ( "/home/unitree/legged_robot_packages/legged_robot" );
         t = 0.0;
         jmap= {FL_0, FL_1, FL_2, FR_0, FR_1, FR_2, RL_0, RL_1, RL_2, RR_0, RR_1, RR_2};
         q = Eigen::VectorXd::Zero ( joint_num );
@@ -46,7 +44,6 @@ public:
 	contact = Eigen::VectorXd::Zero(foot_num);
 
         t1 = 0.0;
-        dt = 1.0/yaml["loop_rate"].as<double>();
     }
 
     ~Custom() {
@@ -61,9 +58,8 @@ public:
     LowCmd cmd = {0};
     LowState state = {0};
     int motiontime = 0;
-    float dt;//  = 0.001, 0.001~0.01
+    float dt = 0.002; // 0.001, 0.001~0.01
 
-    YAML::Node yaml;
     legged_robot::JointCmd j;
     double t;
     vector<int> jmap;
@@ -153,20 +149,20 @@ void Custom::RobotControl()
 
             for ( uint i=0; i<foot_num; i++ ) {
                 cmd.motorCmd[jmap[i*3+0]].mode = 0x0A;
-                cmd.motorCmd[jmap[i*3+0]].Kp = yaml["joint_control"]["hip_roll"]["kp"].as<double>();
-                cmd.motorCmd[jmap[i*3+0]].Kd = yaml["joint_control"]["hip_roll"]["kd"].as<double>();
+                cmd.motorCmd[jmap[i*3+0]].Kp = 0;
+                cmd.motorCmd[jmap[i*3+0]].Kd = 0;
                 cmd.motorCmd[jmap[i*3+0]].q = j.pos[i*3+0];
                 cmd.motorCmd[jmap[i*3+0]].dq = j.vel[i*3+0];
                 cmd.motorCmd[jmap[i*3+0]].tau = j.tau[i*3+0];
                 cmd.motorCmd[jmap[i*3+1]].mode = 0x0A;
-                cmd.motorCmd[jmap[i*3+1]].Kp = yaml["joint_control"]["hip_pitch"]["kp"].as<double>();
-                cmd.motorCmd[jmap[i*3+1]].Kd = yaml["joint_control"]["hip_pitch"]["kd"].as<double>();
+                cmd.motorCmd[jmap[i*3+1]].Kp = 0;
+                cmd.motorCmd[jmap[i*3+1]].Kd = 0;
                 cmd.motorCmd[jmap[i*3+1]].q = j.pos[i*3+1];
                 cmd.motorCmd[jmap[i*3+1]].dq = j.vel[i*3+1];
                 cmd.motorCmd[jmap[i*3+1]].tau = j.tau[i*3+1];
                 cmd.motorCmd[jmap[i*3+2]].mode = 0x0A;
-                cmd.motorCmd[jmap[i*3+2]].Kp = yaml["joint_control"]["knee"]["kp"].as<double>();
-                cmd.motorCmd[jmap[i*3+2]].Kd = yaml["joint_control"]["knee"]["kd"].as<double>();
+                cmd.motorCmd[jmap[i*3+2]].Kp = 0;
+                cmd.motorCmd[jmap[i*3+2]].Kd = 0;
                 cmd.motorCmd[jmap[i*3+2]].q = j.pos[i*3+2];
                 cmd.motorCmd[jmap[i*3+2]].dq = j.vel[i*3+2];
                 cmd.motorCmd[jmap[i*3+2]].tau = j.tau[i*3+2];

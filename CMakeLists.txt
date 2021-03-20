@@ -11,31 +11,24 @@ endif(NOT CMAKE_BUILD_TYPE)
 
 LIST( APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake )
 
-FIND_PACKAGE(yaml-cpp REQUIRED)
-# FIND_PACKAGE(Eigen3 3.0.0 REQUIRED)
-# FIND_PACKAGE(RBDL REQUIRED)
+FIND_PACKAGE(Eigen3 REQUIRED)
 
 include_directories(include
-#     ${EIGEN3_INCLUDE_DIR}
-#     ${RBDL_INCLUDE_DIR}
-    $ENV{LEGGED_ROBOT_PATH}/include
-    $ENV{LEGGED_ROBOT_PATH}/third-party
-    $ENV{LEGGED_ROBOT_PATH}/third-party/eigen)
+                    ${EIGEN3_INCLUDE_DIR}
+                    $ENV{LEGGED_ROBOT_PATH}/include)
 
-link_directories(lib)
-link_directories($ENV{LEGGED_ROBOT_PATH}/build)
+link_directories(lib
+                 $ENV{LEGGED_ROBOT_PATH}/build)
 
 set(EXTRA_LIBS -pthread 
                libunitree_legged_sdk_amd64.so 
-               lcm
-#                ${RBDL_LIBRARY}
-#                ${RBDL_URDFReader_LIBRARY}
-               yaml-cpp
-               legged_control)
+               lcm)
 
 # one pc one process
 add_executable(test_walk_plan src/test_walk_plan.cpp)
-target_link_libraries(test_walk_plan ${EXTRA_LIBS})
+target_link_libraries(test_walk_plan 
+                      ${EXTRA_LIBS}
+                      legged_control)
 
 # one pc one process
 #add_executable(whole_body_control src/whole_body_control.cpp)
