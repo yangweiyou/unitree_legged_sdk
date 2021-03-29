@@ -35,8 +35,8 @@ target_link_libraries(test_walk_plan
 #target_link_libraries(whole_body_control ${EXTRA_LIBS})
 
 # one pc one process
-#add_executable(recovery src/recovery.cpp)
-#target_link_libraries(recovery ${EXTRA_LIBS})
+add_executable(recovery src/recovery.cpp)
+target_link_libraries(recovery ${EXTRA_LIBS})
 
 # one pc one process
 add_executable(zero_torque src/zero_torque.cpp)

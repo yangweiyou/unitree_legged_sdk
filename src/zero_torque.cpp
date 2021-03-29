@@ -59,8 +59,9 @@ void Custom::RobotControl()
     // if( motiontime >= 100){
     if ( motiontime >= 10 ) {
         for ( int j=0; j<joint_num; j++ ) {
-            cmd.motorCmd[j].q = 0;
-            cmd.motorCmd[j].dq = 0;
+            cmd.motorCmd[j].mode = 0x0A;
+            cmd.motorCmd[j].q = PosStopF;
+            cmd.motorCmd[j].dq = VelStopF;
             cmd.motorCmd[j].Kp = 0;
             cmd.motorCmd[j].Kd = 0;
             cmd.motorCmd[j].tau = 0.0f;

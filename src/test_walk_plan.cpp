@@ -58,7 +58,7 @@ public:
     LowCmd cmd = {0};
     LowState state = {0};
     int motiontime = 0;
-    float dt = 0.002; // 0.001, 0.001~0.01
+    float dt = 0.001; // 0.001, 0.001~0.01
 
     legged_robot::JointCmd j;
     double t;
@@ -149,20 +149,20 @@ void Custom::RobotControl()
 
             for ( uint i=0; i<foot_num; i++ ) {
                 cmd.motorCmd[jmap[i*3+0]].mode = 0x0A;
-                cmd.motorCmd[jmap[i*3+0]].Kp = 0;
-                cmd.motorCmd[jmap[i*3+0]].Kd = 0;
+                cmd.motorCmd[jmap[i*3+0]].Kp = 100;
+                cmd.motorCmd[jmap[i*3+0]].Kd = 5;
                 cmd.motorCmd[jmap[i*3+0]].q = j.pos[i*3+0];
                 cmd.motorCmd[jmap[i*3+0]].dq = j.vel[i*3+0];
                 cmd.motorCmd[jmap[i*3+0]].tau = j.tau[i*3+0];
                 cmd.motorCmd[jmap[i*3+1]].mode = 0x0A;
-                cmd.motorCmd[jmap[i*3+1]].Kp = 0;
-                cmd.motorCmd[jmap[i*3+1]].Kd = 0;
+                cmd.motorCmd[jmap[i*3+1]].Kp = 100;
+                cmd.motorCmd[jmap[i*3+1]].Kd = 5;
                 cmd.motorCmd[jmap[i*3+1]].q = j.pos[i*3+1];
                 cmd.motorCmd[jmap[i*3+1]].dq = j.vel[i*3+1];
                 cmd.motorCmd[jmap[i*3+1]].tau = j.tau[i*3+1];
                 cmd.motorCmd[jmap[i*3+2]].mode = 0x0A;
-                cmd.motorCmd[jmap[i*3+2]].Kp = 0;
-                cmd.motorCmd[jmap[i*3+2]].Kd = 0;
+                cmd.motorCmd[jmap[i*3+2]].Kp = 100;
+                cmd.motorCmd[jmap[i*3+2]].Kd = 5;
                 cmd.motorCmd[jmap[i*3+2]].q = j.pos[i*3+2];
                 cmd.motorCmd[jmap[i*3+2]].dq = j.vel[i*3+2];
                 cmd.motorCmd[jmap[i*3+2]].tau = j.tau[i*3+2];
